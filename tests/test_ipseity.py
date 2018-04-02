@@ -162,7 +162,7 @@ class Mixin:
                                                data={'user': 'nothere', 'pass': 'a'})
         self.assertEqual(authentication_response.status_code, 404)
 
-    def test_validate_token(self):
+    def test_validate_token_json(self):
         self.test_make_user()
         authentication_response = self.app.get("/auth_user",
                                                data={'user': 'foo', 'pass': 'bar'})
@@ -172,6 +172,26 @@ class Mixin:
         self.assertEqual(token_check_response.status_code, 200)
         token_check_json = json.loads(token_check_response.data.decode())
         self.assertEqual(token_check_json['user'], 'foo')
+
+    def test_validate_token_header(self):
+        self.test_make_user()
+        authentication_response = self.app.get("/auth_user",
+                                               data={'user': 'foo', 'pass': 'bar'})
+        self.assertEqual(authentication_response.status_code, 200)
+        authentication_token = authentication_response.data.decode()
+        token_check_response = self.app.get(
+            "/test",
+            headers={
+                "Authorization": "Bearer {}".format(
+                    authentication_token
+                )
+            }
+        )
+        self.assertEqual(token_check_response.status_code, 200)
+        self.assertEqual(
+            json.loads(token_check_response.data.decode())['Authenticated'],
+            True
+        )
 
     def test_invalid_token(self):
         self.test_make_user()
@@ -183,7 +203,7 @@ class Mixin:
             authentication_token = 'a' + authentication_token[1:]
         else:
             authentication_token = 'b' + authentication_token[1:]
-        token_check_response = self.app.get("/check", data={'token': authentication_token})
+        token_check_response = self.app.get("/check", data={'access_token': authentication_token})
         self.assertEqual(token_check_response.status_code, 400)
 
     def test_decoratored_endpoint(self):
@@ -194,6 +214,10 @@ class Mixin:
         authentication_token = authentication_response.data.decode()
         test_response = self.app.get("/test", data={"access_token": authentication_token})
         self.assertEqual(test_response.status_code, 200)
+        self.assertEqual(
+            json.loads(test_response.data.decode())['Authenticated'],
+            True
+        )
 
     def test_change_pass(self):
         self.test_make_user()
@@ -403,9 +427,16 @@ class Mixin:
         self.assertEqual(len(user_doc['disallowed_tokens']), 0)
 
     def test_unauthorized_access(self):
-        for x in ("/test", "/refresh_token"):
-            r = self.app.get(x)
-            self.assertEqual(r.status_code, 401)
+        r = self.app.get("/refresh_token")
+        self.assertEqual(r.status_code, 401)
+        # Test endpoint is optional auth, so 200, but should return
+        # a false in the authenticated key
+        r = self.app.get("/test")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(
+            json.loads(r.data.decode())['Authenticated'],
+            False
+        )
         r = self.app.delete("/del_user")
         self.assertEqual(r.status_code, 401)
         r = self.app.post("/change_pass")
@@ -414,7 +445,11 @@ class Mixin:
     def test_malformed_token(self):
         r = self.app.get("/test",
                          data={"access_token": "abc123"})
-        self.assertEqual(r.status_code, 401)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(
+            json.loads(r.data.decode())['Authenticated'],
+            False
+        )
 
     def test_delete_access_token(self):
         self.test_make_user()

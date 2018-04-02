@@ -271,9 +271,12 @@ class CheckToken(Resource):
 
 
 class Test(Resource):
-    @flask_jwtlib.requires_authentication
+    @flask_jwtlib.optional_authentication
     def get(self):
-        return g.json_token
+        if flask_jwtlib.is_authenticated():
+            return {"Authenticated": True, "Token": g.json_token}
+        else:
+            return {"Authenticated": False, "Token": None}
 
 
 class ChangePassword(Resource):
