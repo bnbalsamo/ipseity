@@ -24,7 +24,7 @@ from .exceptions import UserAlreadyExistsError, \
 
 __author__ = "Brian Balsamo"
 __email__ = "brian@brianbalsamo.com"
-__version__ = "0.3.0"
+__version__ = "0.4.1"
 
 
 BLUEPRINT = Blueprint('ipseity', __name__)
@@ -271,9 +271,12 @@ class CheckToken(Resource):
 
 
 class Test(Resource):
-    @flask_jwtlib.requires_authentication
+    @flask_jwtlib.optional_authentication
     def get(self):
-        return g.json_token
+        if flask_jwtlib.is_authenticated():
+            return {"Authenticated": True, "Token": g.json_token}
+        else:
+            return {"Authenticated": False, "Token": None}
 
 
 class ChangePassword(Resource):
