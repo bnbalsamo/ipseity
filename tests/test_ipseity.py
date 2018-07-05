@@ -98,10 +98,6 @@ class Mixin:
     def testPass(self):
         self.assertEqual(True, True)
 
-    def testRoot(self):
-        r = self.app.get("/")
-        self.assertEqual(r.status_code, 200)
-
     def testVersionAvailable(self):
         x = getattr(ipseity, "__version__", None)
         self.assertTrue(x is not None)
@@ -126,21 +122,19 @@ class Mixin:
         )
 
     def test_make_user(self):
-        make_user_response = self.app.post("/make_user",
+        make_user_response = self.app.post("/user",
                                            data={'user': "foo", 'pass': "bar"})
-        self.assertEqual(make_user_response.status_code, 200)
-        make_user_json = json.loads(make_user_response.data.decode())
-        self.assertEqual(make_user_json['success'], True)
+        self.assertEqual(make_user_response.status_code, 201)
 
     def test_user_bounce(self):
         self.test_make_user()
-        make_user_response = self.app.post("/make_user",
+        make_user_response = self.app.post("/user",
                                            data={'user': "foo", 'pass': "bar"})
         self.assertEqual(make_user_response.status_code, 403)
 
     def test_make_and_authenticate(self):
         self.test_make_user()
-        authentication_response = self.app.get("/auth_user",
+        authentication_response = self.app.get("/token",
                                                data={'user': 'foo', 'pass': 'bar'})
         self.assertEqual(authentication_response.status_code, 200)
         authentication_token = authentication_response.data.decode()
@@ -153,18 +147,18 @@ class Mixin:
 
     def test_bad_login(self):
         self.test_make_user()
-        authentication_response = self.app.get("/auth_user",
+        authentication_response = self.app.get("/token",
                                                data={'user': 'foo', 'pass': 'bazz'})
         self.assertEqual(authentication_response.status_code, 404)
 
     def test_nonexistant_user(self):
-        authentication_response = self.app.get("/auth_user",
+        authentication_response = self.app.get("/token",
                                                data={'user': 'nothere', 'pass': 'a'})
         self.assertEqual(authentication_response.status_code, 404)
 
     def test_validate_token_json(self):
         self.test_make_user()
-        authentication_response = self.app.get("/auth_user",
+        authentication_response = self.app.get("/token",
                                                data={'user': 'foo', 'pass': 'bar'})
         self.assertEqual(authentication_response.status_code, 200)
         authentication_token = authentication_response.data.decode()
@@ -175,12 +169,12 @@ class Mixin:
 
     def test_validate_token_header(self):
         self.test_make_user()
-        authentication_response = self.app.get("/auth_user",
+        authentication_response = self.app.get("/token",
                                                data={'user': 'foo', 'pass': 'bar'})
         self.assertEqual(authentication_response.status_code, 200)
         authentication_token = authentication_response.data.decode()
         token_check_response = self.app.get(
-            "/test",
+            "/user",
             headers={
                 "Authorization": "Bearer {}".format(
                     authentication_token
@@ -188,14 +182,10 @@ class Mixin:
             }
         )
         self.assertEqual(token_check_response.status_code, 200)
-        self.assertEqual(
-            json.loads(token_check_response.data.decode())['Authenticated'],
-            True
-        )
 
     def test_invalid_token(self):
         self.test_make_user()
-        authentication_response = self.app.get("/auth_user",
+        authentication_response = self.app.get("/token",
                                                data={'user': 'foo', 'pass': 'bar'})
         self.assertEqual(authentication_response.status_code, 200)
         authentication_token = authentication_response.data.decode()
@@ -208,66 +198,62 @@ class Mixin:
 
     def test_decoratored_endpoint(self):
         self.test_make_user()
-        authentication_response = self.app.get("/auth_user",
+        authentication_response = self.app.get("/token",
                                                data={'user': 'foo', 'pass': 'bar'})
         self.assertEqual(authentication_response.status_code, 200)
         authentication_token = authentication_response.data.decode()
-        test_response = self.app.get("/test", data={"access_token": authentication_token})
+        test_response = self.app.get("/user", data={"access_token": authentication_token})
         self.assertEqual(test_response.status_code, 200)
-        self.assertEqual(
-            json.loads(test_response.data.decode())['Authenticated'],
-            True
-        )
 
     def test_change_pass(self):
         self.test_make_user()
-        authentication_response = self.app.get("/auth_user",
+        authentication_response = self.app.get("/token",
                                                data={'user': 'foo', 'pass': 'bar'})
         self.assertEqual(authentication_response.status_code, 200)
         authentication_token = authentication_response.data.decode()
 
         # Change the password
-        change_pass_response = self.app.post(
-            "/change_pass",
+        change_pass_response = self.app.patch(
+            "/user",
             data={
-                "new_pass": "baz",
+                "pass": "baz",
                 "access_token": authentication_token
             }
         )
 
         # Test to be sure the new password is valid
         self.assertEqual(change_pass_response.status_code, 200)
-        authentication_response = self.app.get("/auth_user",
+        authentication_response = self.app.get("/token",
                                                data={'user': 'foo', 'pass': 'baz'})
         self.assertEqual(authentication_response.status_code, 200)
 
         # Test to be sure the old password is now invalid
         self.assertEqual(change_pass_response.status_code, 200)
-        authentication_response = self.app.get("/auth_user",
+        authentication_response = self.app.get("/token",
                                                data={'user': 'foo', 'pass': 'bar'})
         self.assertEqual(authentication_response.status_code, 404)
 
     def test_delete_account(self):
         self.test_make_user()
-        authentication_response = self.app.get("/auth_user",
+        authentication_response = self.app.get("/token",
                                                data={'user': 'foo', 'pass': 'bar'})
         self.assertEqual(authentication_response.status_code, 200)
         access_token = authentication_response.data.decode()
 
         del_self_response = self.app.delete(
-            "/del_user",
+            "/user",
             data={'access_token': access_token}
         )
-        self.assertEqual(del_self_response.status_code, 200)
+        self.assertEqual(del_self_response.status_code, 204)
 
-        authentication_response = self.app.get("/auth_user",
+        authentication_response = self.app.get("/token",
                                                data={'user': 'foo', 'pass': 'bar'})
         self.assertEqual(authentication_response.status_code, 403)
 
     def test_refresh_token(self):
         self.test_make_user()
         # Get an access token
-        authentication_response = self.app.get("/auth_user",
+        authentication_response = self.app.get("/token",
                                                data={'user': 'foo', 'pass': 'bar'})
         self.assertEqual(authentication_response.status_code, 200)
         access_token = authentication_response.data.decode()
@@ -277,7 +263,7 @@ class Mixin:
         self.assertEqual(refresh_token_response.status_code, 200)
         refresh_token = refresh_token_response.data.decode()
         # Use the refresh token to get a new access token
-        second_authentication_response = self.app.get("/auth_user",
+        second_authentication_response = self.app.get("/token",
                                                       data={'user': refresh_token})
         self.assertEqual(second_authentication_response.status_code, 200)
         second_access_token = second_authentication_response.data.decode()
@@ -289,17 +275,17 @@ class Mixin:
                 "refresh_token": refresh_token
             }
         )
-        self.assertEqual(deactivate_refresh_response.status_code, 200)
+        self.assertEqual(deactivate_refresh_response.status_code, 204)
         # Be sure we can't use that refresh token anymore
         # We get a 400 when we try
-        third_auth_attempt_response = self.app.get("/auth_user",
+        third_auth_attempt_response = self.app.get("/token",
                                                    data={"user": refresh_token})
         self.assertEqual(third_auth_attempt_response.status_code, 400)
 
     def test_token_limitations(self):
         self.test_make_user()
         # Get an access token
-        authentication_response = self.app.get("/auth_user",
+        authentication_response = self.app.get("/token",
                                                data={'user': 'foo', 'pass': 'bar'})
         self.assertEqual(authentication_response.status_code, 200)
         access_token = authentication_response.data.decode()
@@ -309,14 +295,14 @@ class Mixin:
         self.assertEqual(refresh_token_response.status_code, 200)
         refresh_token = refresh_token_response.data.decode()
         # Use the refresh token to get a new access token
-        second_authentication_response = self.app.get("/auth_user",
+        second_authentication_response = self.app.get("/token",
                                                       data={'user': refresh_token})
         self.assertEqual(second_authentication_response.status_code, 200)
         second_access_token = second_authentication_response.data.decode()
 
         # Now that we've got our refresh token based access token, lets
         # try to do all the things we can't.
-        delete_me_response = self.app.delete("/del_user",
+        delete_me_response = self.app.delete("/user",
                                              data={'access_token': second_access_token})
         self.assertEqual(delete_me_response.status_code, 403)
 
@@ -324,15 +310,15 @@ class Mixin:
                                                   data={'access_token': second_access_token})
         self.assertEqual(new_refresh_token_response.status_code, 403)
 
-        chpass_response = self.app.post("/change_pass",
+        chpass_response = self.app.patch("/user",
                                         data={'access_token': second_access_token,
-                                              'new_pass': 'buzz'})
+                                              'pass': 'buzz'})
         self.assertEqual(chpass_response.status_code, 403)
 
     def test_refresh_token_as_access_token(self):
         self.test_make_user()
         # Get an access token
-        authentication_response = self.app.get("/auth_user",
+        authentication_response = self.app.get("/token",
                                                data={'user': 'foo', 'pass': 'bar'})
         self.assertEqual(authentication_response.status_code, 200)
         access_token = authentication_response.data.decode()
@@ -348,7 +334,7 @@ class Mixin:
         self.assertEqual(refresh_as_access_response.status_code, 400)
 
         # Try to use an access token as a refresh_token
-        access_as_refresh_response = self.app.get("/auth_user",
+        access_as_refresh_response = self.app.get("/token",
                                                   data={'user': access_token})
         self.assertEqual(access_as_refresh_response.status_code, 400)
 
@@ -356,7 +342,7 @@ class Mixin:
         ipseity.blueprint.BLUEPRINT.config['REFRESH_EXP_DELTA'] = 5
         self.test_make_user()
         # Get an access token
-        authentication_response = self.app.get("/auth_user",
+        authentication_response = self.app.get("/token",
                                                data={'user': 'foo', 'pass': 'bar'})
         self.assertEqual(authentication_response.status_code, 200)
         access_token = authentication_response.data.decode()
@@ -366,7 +352,7 @@ class Mixin:
         self.assertEqual(refresh_token_response.status_code, 200)
         refresh_token = refresh_token_response.data.decode()
         sleep(7)  # Let the refresh token expire
-        second_authentication_response = self.app.get("/auth_user",
+        second_authentication_response = self.app.get("/token",
                                                       data={'user': refresh_token})
         self.assertEqual(second_authentication_response.status_code, 400)
         del ipseity.blueprint.BLUEPRINT.config['REFRESH_EXP_DELTA']
@@ -375,7 +361,7 @@ class Mixin:
         ipseity.blueprint.BLUEPRINT.config['ACCESS_EXP_DELTA'] = 5
         self.test_make_user()
         # Get an access token
-        authentication_response = self.app.get("/auth_user",
+        authentication_response = self.app.get("/token",
                                                data={'user': 'foo', 'pass': 'bar'})
         self.assertEqual(authentication_response.status_code, 200)
         access_token = authentication_response.data.decode()
@@ -389,7 +375,7 @@ class Mixin:
         ipseity.blueprint.BLUEPRINT.config['REFRESH_EXP_DELTA'] = 10
         self.test_make_user()
         # Get an access token
-        authentication_response = self.app.get("/auth_user",
+        authentication_response = self.app.get("/token",
                                                data={'user': 'foo', 'pass': 'bar'})
         self.assertEqual(authentication_response.status_code, 200)
         access_token = authentication_response.data.decode()
@@ -406,7 +392,7 @@ class Mixin:
                 self.app.delete("/refresh_token",
                                 data={"access_token": access_token,
                                       "refresh_token": x})
-            self.assertEqual(refresh_token_delete_response.status_code, 200)
+            self.assertEqual(refresh_token_delete_response.status_code, 204)
         # grab our user document now - all the deleted tokens should be in there
         user_doc = ipseity.blueprint.BLUEPRINT.config['authentication_coll'].find_one(
             {"user": "foo"}
@@ -417,7 +403,7 @@ class Mixin:
         # Fire a functionality which prunes the database
         # [authentication, getting a refresh token, deleting a refresh token]
         # We'll use authentication
-        second_access_token_response = self.app.get("/auth_user",
+        second_access_token_response = self.app.get("/token",
                                                     data={"user": "foo", "pass": "bar"})
         self.assertEqual(second_access_token_response.status_code, 200)
         # Now grab the user document again, the old tokens should be pruned
@@ -429,32 +415,22 @@ class Mixin:
     def test_unauthorized_access(self):
         r = self.app.get("/refresh_token")
         self.assertEqual(r.status_code, 401)
-        # Test endpoint is optional auth, so 200, but should return
-        # a false in the authenticated key
-        r = self.app.get("/test")
-        self.assertEqual(r.status_code, 200)
-        self.assertEqual(
-            json.loads(r.data.decode())['Authenticated'],
-            False
-        )
-        r = self.app.delete("/del_user")
+        r = self.app.get("/user")
+        self.assertEqual(r.status_code, 204)
+        r = self.app.delete("/user")
         self.assertEqual(r.status_code, 401)
-        r = self.app.post("/change_pass")
+        r = self.app.patch("/user")
         self.assertEqual(r.status_code, 401)
 
     def test_malformed_token(self):
-        r = self.app.get("/test",
+        r = self.app.get("/user",
                          data={"access_token": "abc123"})
-        self.assertEqual(r.status_code, 200)
-        self.assertEqual(
-            json.loads(r.data.decode())['Authenticated'],
-            False
-        )
+        self.assertEqual(r.status_code, 204)
 
     def test_delete_access_token(self):
         self.test_make_user()
         # Get an access token
-        authentication_response = self.app.get("/auth_user",
+        authentication_response = self.app.get("/token",
                                                data={'user': 'foo', 'pass': 'bar'})
         self.assertEqual(authentication_response.status_code, 200)
         access_token = authentication_response.data.decode()
@@ -471,7 +447,7 @@ class Mixin:
     def test_delete_nonexistant_refresh_token(self):
         self.test_make_user()
         # Get an access token
-        authentication_response = self.app.get("/auth_user",
+        authentication_response = self.app.get("/token",
                                                data={'user': 'foo', 'pass': 'bar'})
         self.assertEqual(authentication_response.status_code, 200)
         access_token = authentication_response.data.decode()

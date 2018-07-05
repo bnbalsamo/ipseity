@@ -1,5 +1,5 @@
 """
-whogoesthere
+ipseity - an authentication microservice
 """
 import logging
 import datetime
@@ -92,34 +92,76 @@ def prune_disallowed_tokens(user):
             )
 
 
-class Root(Resource):
-    def get(self):
-        return {"Status": "Not broken!"}
-
-
 class Version(Resource):
     def get(self):
+        """
+        .. :quickref: Version; Return the version number
+
+        Return the version number
+
+        :>json string version: The version number of the API
+
+        :statuscode 200: No error
+        """
         return {"version": __version__}
 
 
 class PublicKey(Resource):
     def get(self):
-        # This should never happen, as the endpoint shouldn't get registered
-        # to the API object when a symmetric algo is in use, but it never
-        # hurts to be sure, I guess
-        # PS: It also helps in testing
+        """
+        .. :quickref: Public Key; Returns the public key, if applicable
+
+        Returns the public key as plaintext, if applicable.
+
+        :statuscode 200: No error
+        :statuscode 404: A symmetric algorithm is in use, there is no
+            public key
+        """
         if BLUEPRINT.config['VERIFY_KEY'] == BLUEPRINT.config['SIGNING_KEY']:
             abort(404)
         return Response(BLUEPRINT.config['VERIFY_KEY'])
 
 
-class MakeUser(Resource):
+class User(Resource):
+    @flask_jwtlib.optional_authentication
+    def get(self):
+        """
+        .. :quickref: User; If logged in, get a token
+
+        If a valid token is provided via _any_ of the below,
+            returns token data as JSON. Else returns 204.
+
+        :reqheader Authorization: (optional) An encoded JWT
+        :form access_token: (optional) An encoded JWT
+        :query access_token: (optional) An encoded JWT
+
+        :statuscode 200: No error
+        :statuscode 204: No valid token found
+        """
+        if flask_jwtlib.is_authenticated():
+            return  g.json_token
+        else:
+            return Response(status=204)
+
     def post(self):
+        """
+        .. :quickref: User; Create a new user
+
+        Create a new user
+
+        :form user: The username of the user to create
+        :form pass: The password for the new user
+
+        :>json bool success: Whether or not the user
+
+        :statuscode 200: No error
+        :statuscode 403: User already exists
+        """
         parser = reqparse.RequestParser()
         parser.add_argument('user', type=str, required=True,
-                            location=['form', 'header', 'cookies'])
+                            location=['form'])
         parser.add_argument('pass', type=str, required=True,
-                            location=['form', 'header', 'cookies'])
+                            location=['form'])
         args = parser.parse_args()
 
         log.debug("Attempting to create user {}".format(args['user']))
@@ -138,13 +180,27 @@ class MakeUser(Resource):
 
         log.info("User {} created".format(args['user']))
 
-        return {"success": True}
+        return Response(status=201)
 
 
-class RemoveUser(Resource):
     @flask_jwtlib.requires_authentication
     @requires_password_authentication
     def delete(self):
+        """
+        .. :quickref: User; Delete a user
+
+        Delete the user
+
+        :reqheader Authorization: (optional) An encoded JWT
+        :form access_token: (optional) An encoded JWT
+        :query access_token: (optional) An encoded JWT
+
+        Requires authentical credentials to be provided via one of the above methods.
+        The token *must* have been acquired via a password authentication.
+
+        :statuscode 204: No error
+        :statuscode 404: User doesn't exist, or delete failed
+        """
         log.debug("Attempting to delete user: {}".format(g.json_token['user']))
 
         res = BLUEPRINT.config['authentication_coll'].update_one(
@@ -155,15 +211,61 @@ class RemoveUser(Resource):
         if res.modified_count == 1:
             # success
             log.info("User {} deleted".format(g.json_token['user']))
-            return {"success": True}
+            return Response(status=204)
         else:
             # fail
             log.info("Deletetion attempt on user {} failed".format(g.json_token['user']))
-            return {"success": False}
+            abort(404)
+
+    @flask_jwtlib.requires_authentication
+    @requires_password_authentication
+    def patch(self):
+        """
+        .. :quickref: User; Changes a users password
+
+        Changes the authenticated users password.
+
+        :reqheader Authorization: (optional) An encoded JWT
+        :form access_token: (optional) An encoded JWT
+        :query access_token: (optional) An encoded JWT
+
+        Requires authentical credentials to be provided via one of the above methods.
+        The token *must* have been acquired via a password authentication.
+
+        :form pass: The string to change the password to
+
+        :statuscode 200: No error
+        """
+        parser = reqparse.RequestParser()
+        parser.add_argument('pass', type=str, required=True,
+                            location=['form', 'header', 'cookies'])
+        args = parser.parse_args()
+
+        BLUEPRINT.config['authentication_coll'].update_one(
+            {'user': g.json_token['user']},
+            {'$set': {'password': bcrypt.hashpw(args['pass'].encode(), bcrypt.gensalt())}}
+        )
+
+        return Response(status=200)
 
 
-class AuthUser(Resource):
+class Token(Resource):
     def get(self):
+        """
+        .. :quickref: Token; get a token
+
+        Get a token
+
+        :form user: The username to authenticate as, or an encoded refresh token
+        :form pass: The password for the user, if not utilizing a refresh token
+
+        Returns an encoded token in plaintext
+
+        :statuscode 200: No error
+        :statuscode 400: Refresh token is invalid
+        :statuscode 404: User login error
+        :statuscode 403: Account deleted
+        """
         parser = reqparse.RequestParser()
         parser.add_argument('user', type=str, required=True,
                             location=['form', 'header', 'cookies'])
@@ -248,6 +350,14 @@ class AuthUser(Resource):
 
 class CheckToken(Resource):
     def get(self):
+        """
+        .. :quickref: Validates a token
+
+        Validates a token
+
+        :statuscode 200: No error
+        :statuscode 400: Token is invalid
+        """
         parser = reqparse.RequestParser()
         parser.add_argument('access_token', type=str, required=True,
                             location=['form', 'header', 'cookies'])
@@ -270,36 +380,26 @@ class CheckToken(Resource):
             raise InvalidTokenError
 
 
-class Test(Resource):
-    @flask_jwtlib.optional_authentication
-    def get(self):
-        if flask_jwtlib.is_authenticated():
-            return {"Authenticated": True, "Token": g.json_token}
-        else:
-            return {"Authenticated": False, "Token": None}
-
-
-class ChangePassword(Resource):
-    @flask_jwtlib.requires_authentication
-    @requires_password_authentication
-    def post(self):
-        parser = reqparse.RequestParser()
-        parser.add_argument('new_pass', type=str, required=True,
-                            location=['form', 'header', 'cookies'])
-        args = parser.parse_args()
-
-        BLUEPRINT.config['authentication_coll'].update_one(
-            {'user': g.json_token['user']},
-            {'$set': {'password': bcrypt.hashpw(args['new_pass'].encode(), bcrypt.gensalt())}}
-        )
-
-        return {"success": True}
-
-
 class RefreshToken(Resource):
     @flask_jwtlib.requires_authentication
     @requires_password_authentication
     def get(self):
+        """
+        .. :quickref: Refresh Token; get a refresh token
+
+        Get a refresh token
+
+        :reqheader Authorization: (optional) An encoded JWT
+        :form access_token: (optional) An encoded JWT
+        :query access_token: (optional) An encoded JWT
+
+        Requires authentical credentials to be provided via one of the above methods.
+        The token *must* have been acquired via a password authentication.
+
+        Returns an encoded token in plaintext
+
+        :statuscode 200: No error
+        """
         # we need their uid for the fresh token
         user_db_doc = BLUEPRINT.config['authentication_coll'].find_one(
             {"user": g.json_token['user']}
@@ -328,6 +428,19 @@ class RefreshToken(Resource):
 
     @flask_jwtlib.requires_authentication
     def delete(self):
+        """
+        .. :quickref: Refresh Token; delete a refresh token
+
+        Delete a refresh token
+
+        :reqheader Authorization: (optional) An encoded JWT
+        :form access_token: (optional) An encoded JWT
+        :query access_token: (optional) An encoded JWT
+
+        Requires authentical credentials to be provided via one of the above methods.
+
+        :statuscode: 204 No error
+        """
         parser = reqparse.RequestParser()
         parser.add_argument('refresh_token', type=str, required=True,
                             location=['form', 'header', 'cookies'])
@@ -352,9 +465,9 @@ class RefreshToken(Resource):
 
         if res.modified_count > 0:
             prune_disallowed_tokens(g.json_token['user'])
-            return {"success": True}
+            return Response(status=204)
         else:
-            return {"success": False}
+            abort(404)
 
 
 @BLUEPRINT.record
@@ -409,7 +522,6 @@ def handle_configs(setup_state):
         BLUEPRINT.config['SIGNING_KEY'] = BLUEPRINT.config['PRIVATE_KEY']
         BLUEPRINT.config['VERIFY_KEY'] = BLUEPRINT.config['PUBLIC_KEY']
         flask_jwtlib.set_permanent_verification_key(BLUEPRINT.config['PUBLIC_KEY'])
-        API.add_resource(PublicKey, "/pubkey")
     else:
         if BLUEPRINT.config.get("PRIVATE_KEY") is None or \
                 BLUEPRINT.config.get("PUBLIC_KEY") is not None:
@@ -429,12 +541,9 @@ def handle_configs(setup_state):
         logging.basicConfig(level="WARN")
 
 
-API.add_resource(Root, "/")
 API.add_resource(Version, "/version")
-API.add_resource(MakeUser, "/make_user")
-API.add_resource(RemoveUser, "/del_user")
-API.add_resource(AuthUser, "/auth_user")
+API.add_resource(User, "/user")
+API.add_resource(Token, "/token")
 API.add_resource(CheckToken, "/check")
-API.add_resource(Test, "/test")
-API.add_resource(ChangePassword, "/change_pass")
 API.add_resource(RefreshToken, "/refresh_token")
+API.add_resource(PublicKey, "/pubkey")
