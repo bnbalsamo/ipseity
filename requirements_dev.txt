@@ -9,4 +9,5 @@ twine
 autopep8
 check-manifest
 sphinx
+sphinxcontrib-httpdomain
 sphinx-rtd-theme
