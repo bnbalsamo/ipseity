@@ -310,7 +310,7 @@ def login():
     if form.validate_on_submit():
         # post, set token in session
         token_resp = requests.get(
-            environ['IPSEITY_URL'] + '/auth_user',
+            environ['IPSEITY_URL'] + '/token',
             data={
                 'user': request.form['user'],
                 'pass': request.form['password']
@@ -354,13 +354,13 @@ def register():
 
         # post, make a user
         make_user_resp = requests.post(
-            environ['IPSEITY_URL'] + "/make_user",
+            environ['IPSEITY_URL'] + "/user",
             data={
                 'user': request.form['user'],
                 'pass': request.form['password']
             }
         )
-        if make_user_resp.status_code != 200:
+        if make_user_resp.status_code != 201:
             flash("That username is already taken!", 'alert-danger')
             return redirect(url_for("register"))
         login()
@@ -407,7 +407,7 @@ def deauth_refresh_token():
             data={"access_token": g.raw_token,
                   "refresh_token": request.form['refresh_token']}
         )
-        if del_refresh_token_response.status_code != 200:
+        if del_refresh_token_response.status_code != 204:
             flash("There was a problem deauthenticating your token!", 'alert-danger')
             redirect(url_for("root"))
         flash("Refresh token deauthenticated!", 'alert-success')
@@ -426,10 +426,10 @@ def delete_me():
     form = DeleteMeForm()
     if form.validate_on_submit():
         del_response = requests.delete(
-            environ['IPSEITY_URL'] + '/del_user',
+            environ['IPSEITY_URL'] + '/user',
             data={"access_token": g.raw_token}
         )
-        if del_response.status_code != 200:
+        if del_response.status_code != 204:
             flash("There was a problem deleting your account!", "alert-danger")
         try:
             del session['access_token']
@@ -453,8 +453,8 @@ def delete_me():
 def change_password():
     form = ChangePasswordForm()
     if form.validate_on_submit():
-        change_pass_response = requests.post(
-            environ['IPSEITY_URL'] + "/change_pass",
+        change_pass_response = requests.patch(
+            environ['IPSEITY_URL'] + "/user",
             data={"access_token": g.raw_token,
                   "new_pass": request.form['password']}
         )

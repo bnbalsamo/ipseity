@@ -1,3 +1,4 @@
+-r requirements.txt
 pip
 bumpversion
 wheel
@@ -7,3 +8,6 @@ pytest
 twine
 autopep8
 check-manifest
+sphinx
+sphinxcontrib-httpdomain
+sphinx-rtd-theme
