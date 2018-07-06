@@ -9,7 +9,7 @@ def readme():
 setup(
     name="ipseity",
     description="An authentication API",
-    version="0.4.1",
+    version="0.5.0",
     long_description=readme(),
     author="Brian Balsamo",
     author_email="brian@brianbalsamo.com",

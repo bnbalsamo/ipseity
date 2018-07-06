@@ -24,7 +24,7 @@ from .exceptions import UserAlreadyExistsError, \
 
 __author__ = "Brian Balsamo"
 __email__ = "brian@brianbalsamo.com"
-__version__ = "0.4.1"
+__version__ = "0.5.0"
 
 
 BLUEPRINT = Blueprint('ipseity', __name__)
