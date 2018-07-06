@@ -126,6 +126,11 @@ class Mixin:
                                            data={'user': "foo", 'pass': "bar"})
         self.assertEqual(make_user_response.status_code, 201)
 
+    def test_make_user_json(self):
+        make_user_response = self.app.post("/user",
+                                           json={'user': "foo", 'pass': "bar"})
+        self.assertEqual(make_user_response.status_code, 201)
+
     def test_user_bounce(self):
         self.test_make_user()
         make_user_response = self.app.post("/user",

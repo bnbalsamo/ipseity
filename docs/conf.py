@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+from os import environ
+environ['IPSEITY_DEFER_CONFIG'] = "True"
+on_rtd = environ.get('READTHEDOCS') == 'True'
 #
 # Configuration file for the Sphinx documentation builder.
 #
@@ -78,7 +81,10 @@ pygments_style = 'sphinx'
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'alabaster'
+if on_rtd:
+    html_theme = 'default'
+else:
+    html_theme = 'sphinx_rtd_theme'
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
@@ -164,4 +170,8 @@ texinfo_documents = [
 # -- Options for intersphinx extension ---------------------------------------
 
 # Example configuration for intersphinx: refer to the Python standard library.
-intersphinx_mapping = {'https://docs.python.org/': None}
+intersphinx_mapping = {
+    'python': ('https://docs.python.org/3.6', None),
+    'flask_restful': ('http://flask-restful.readthedocs.io/en/latest/', None),
+    'flask': ('http://flask.pocoo.org/docs/latest/', None)
+}

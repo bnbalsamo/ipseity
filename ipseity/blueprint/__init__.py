@@ -95,9 +95,11 @@ def prune_disallowed_tokens(user):
 class Version(Resource):
     def get(self):
         """
-        .. :quickref: Version; Return the version number
+        .. :quickref: Version; Return the version number of the API
 
-        Return the version number
+        **Authentication**: No Authentication
+
+        Return the version number of the API
 
         :>json string version: The version number of the API
 
@@ -110,6 +112,8 @@ class PublicKey(Resource):
     def get(self):
         """
         .. :quickref: Public Key; Returns the public key, if applicable
+
+        **Authentication**: No Authentication
 
         Returns the public key as plaintext, if applicable.
 
@@ -126,20 +130,19 @@ class User(Resource):
     @flask_jwtlib.optional_authentication
     def get(self):
         """
-        .. :quickref: User; If logged in, get a token
+        .. :quickref: User; If authentication provided get token JSON payload
 
-        If a valid token is provided via _any_ of the below,
-            returns token data as JSON. Else returns 204.
+        **Authentication**: Authentication Optional
 
-        :reqheader Authorization: (optional) An encoded JWT
-        :form access_token: (optional) An encoded JWT
-        :query access_token: (optional) An encoded JWT
+        If authentication is provided return the token's JSON payload, otherwise
+        returns an empty response with status code 204.
 
+        :Response JSON Object: The token payload
         :statuscode 200: No error
         :statuscode 204: No valid token found
         """
         if flask_jwtlib.is_authenticated():
-            return  g.json_token
+            return g.json_token
         else:
             return Response(status=204)
 
@@ -147,21 +150,19 @@ class User(Resource):
         """
         .. :quickref: User; Create a new user
 
+        **Authentication**: No Authentication
+
         Create a new user
 
-        :form user: The username of the user to create
-        :form pass: The password for the new user
+        :<json str user: The username of the user to create
+        :<json str pass: The password for the new user
 
-        :>json bool success: Whether or not the user
-
-        :statuscode 200: No error
+        :statuscode 201: No error
         :statuscode 403: User already exists
         """
         parser = reqparse.RequestParser()
-        parser.add_argument('user', type=str, required=True,
-                            location=['form'])
-        parser.add_argument('pass', type=str, required=True,
-                            location=['form'])
+        parser.add_argument('user', type=str, required=True)
+        parser.add_argument('pass', type=str, required=True)
         args = parser.parse_args()
 
         log.debug("Attempting to create user {}".format(args['user']))
@@ -182,21 +183,15 @@ class User(Resource):
 
         return Response(status=201)
 
-
     @flask_jwtlib.requires_authentication
     @requires_password_authentication
     def delete(self):
         """
         .. :quickref: User; Delete a user
 
+        **Authentication**: Password Authentication Required
+
         Delete the user
-
-        :reqheader Authorization: (optional) An encoded JWT
-        :form access_token: (optional) An encoded JWT
-        :query access_token: (optional) An encoded JWT
-
-        Requires authentical credentials to be provided via one of the above methods.
-        The token *must* have been acquired via a password authentication.
 
         :statuscode 204: No error
         :statuscode 404: User doesn't exist, or delete failed
@@ -223,22 +218,16 @@ class User(Resource):
         """
         .. :quickref: User; Changes a users password
 
+        **Authentication**: Password Authentication Required
+
         Changes the authenticated users password.
 
-        :reqheader Authorization: (optional) An encoded JWT
-        :form access_token: (optional) An encoded JWT
-        :query access_token: (optional) An encoded JWT
-
-        Requires authentical credentials to be provided via one of the above methods.
-        The token *must* have been acquired via a password authentication.
-
-        :form pass: The string to change the password to
+        :<json str pass: The string to change the password to
 
         :statuscode 200: No error
         """
         parser = reqparse.RequestParser()
-        parser.add_argument('pass', type=str, required=True,
-                            location=['form', 'header', 'cookies'])
+        parser.add_argument('pass', type=str, required=True)
         args = parser.parse_args()
 
         BLUEPRINT.config['authentication_coll'].update_one(
@@ -254,12 +243,14 @@ class Token(Resource):
         """
         .. :quickref: Token; get a token
 
+        **Authentication**: No Authentication
+
         Get a token
 
-        :form user: The username to authenticate as, or an encoded refresh token
-        :form pass: The password for the user, if not utilizing a refresh token
-
         Returns an encoded token in plaintext
+
+        :<json str user: The username to authenticate as, or an encoded refresh token
+        :<json str pass: The password for the user, if not utilizing a refresh token
 
         :statuscode 200: No error
         :statuscode 400: Refresh token is invalid
@@ -267,10 +258,8 @@ class Token(Resource):
         :statuscode 403: Account deleted
         """
         parser = reqparse.RequestParser()
-        parser.add_argument('user', type=str, required=True,
-                            location=['form', 'header', 'cookies'])
-        parser.add_argument('pass', type=str, default=None,
-                            location=['form', 'header', 'cookies'])
+        parser.add_argument('user', type=str, required=True)
+        parser.add_argument('pass', type=str, default=None)
         args = parser.parse_args()
         log.debug("Attempting to auth {}".format(args['user']))
 
@@ -353,14 +342,21 @@ class CheckToken(Resource):
         """
         .. :quickref: Validates a token
 
+        **Authentication**: No Authentication
+
         Validates a token
+
+        If the token is valid, returns the token's JSON payload
+
+        :<json str access_token: The token to check
+
+        :Response JSON Object: The token payload
 
         :statuscode 200: No error
         :statuscode 400: Token is invalid
         """
         parser = reqparse.RequestParser()
-        parser.add_argument('access_token', type=str, required=True,
-                            location=['form', 'header', 'cookies'])
+        parser.add_argument('access_token', type=str, required=True)
         args = parser.parse_args()
 
         log.debug("Checking token: {}".format(args['access_token']))
@@ -389,14 +385,9 @@ class RefreshToken(Resource):
 
         Get a refresh token
 
-        :reqheader Authorization: (optional) An encoded JWT
-        :form access_token: (optional) An encoded JWT
-        :query access_token: (optional) An encoded JWT
-
-        Requires authentical credentials to be provided via one of the above methods.
-        The token *must* have been acquired via a password authentication.
-
         Returns an encoded token in plaintext
+
+        **Authentication**: Password Authentication Required
 
         :statuscode 200: No error
         """
@@ -433,17 +424,12 @@ class RefreshToken(Resource):
 
         Delete a refresh token
 
-        :reqheader Authorization: (optional) An encoded JWT
-        :form access_token: (optional) An encoded JWT
-        :query access_token: (optional) An encoded JWT
+        **Authentication**: Authentication Required
 
-        Requires authentical credentials to be provided via one of the above methods.
-
-        :statuscode: 204 No error
+        :statuscode 204: No error
         """
         parser = reqparse.RequestParser()
-        parser.add_argument('refresh_token', type=str, required=True,
-                            location=['form', 'header', 'cookies'])
+        parser.add_argument('refresh_token', type=str, required=True)
         args = parser.parse_args()
 
         try:
@@ -541,9 +527,9 @@ def handle_configs(setup_state):
         logging.basicConfig(level="WARN")
 
 
-API.add_resource(Version, "/version")
 API.add_resource(User, "/user")
 API.add_resource(Token, "/token")
-API.add_resource(CheckToken, "/check")
 API.add_resource(RefreshToken, "/refresh_token")
+API.add_resource(CheckToken, "/check")
 API.add_resource(PublicKey, "/pubkey")
+API.add_resource(Version, "/version")
